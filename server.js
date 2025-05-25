@@ -13,11 +13,9 @@ const startKafkaConsumer = require('./kafkaConsumer');
 const app = express();
 const PORT = process.env.PORT || 9094;
 
-// Kafka Producer
 const kafka = new Kafka({ brokers: [process.env.KAFKA_BROKERS] });
 const producer = kafka.producer();
 
-// Store userId → game mapping
 const sessionMap = {};
 const clients = new Set();
 
@@ -25,6 +23,8 @@ app.use(cors({
   origin: ['http://localhost:3000', 'http://frontend:3000'],
   credentials: true
 }));
+
+app.use(express.json());
 
 // Serve Unity WebGL games
 app.use('/games/:gameName', (req, res, next) => {
@@ -59,7 +59,7 @@ const dbPool = mysql.createPool({
   port: process.env.DB_PORT || 3306,
 });
 
-// WebSocket server
+// WebSocket
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
@@ -78,7 +78,6 @@ wss.on('connection', (ws, req) => {
         console.warn('Invalid message format');
         return;
       }
-
       console.log(`📨 Sending to Kafka: ${userId} → ${game}`);
       await producer.send({
         topic: process.env.KAFKA_TOPIC,
@@ -100,9 +99,7 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// Save metrics
-app.use(express.json());
-
+// Save basic metrics
 app.post('/send-metrics/:game', async (req, res) => {
   const { userId, tiempo, puntaje, errores } = req.body;
   const game = req.params.game.toLowerCase();
@@ -123,6 +120,46 @@ app.post('/send-metrics/:game', async (req, res) => {
   } catch (err) {
     console.error(`DB error (${table}):`, err);
     res.status(500).send('DB error.');
+  }
+});
+
+// Save full cajero_actividad session
+app.post('/send-cajero-actividad', async (req, res) => {
+  const data = req.body;
+
+  if (!data.userId || !data.sessionTimestamp || !data.activityResults) {
+    return res.status(400).send('Missing required fields');
+  }
+
+  const fields = ['user_id', 'session_timestamp'];
+  const values = [data.userId, data.sessionTimestamp];
+
+  for (let i = 1; i <= 5; i++) {
+    const key = `interaction_${i}`;
+    const result = data.activityResults[key] || {};
+    fields.push(`interaction_${i}_time`);
+    fields.push(`interaction_${i}_correct_change`);
+    fields.push(`interaction_${i}_delta_change`);
+    fields.push(`interaction_${i}_identified_well`);
+
+    values.push(result.interactionTime ?? null);
+    values.push(result.customerCorrectChange ?? null);
+    values.push(result.deltaChange ?? null);
+    values.push(result.identifiedWell ?? null);
+  }
+
+  const placeholders = fields.map(() => '?').join(',');
+  const sql = `INSERT INTO cajero_actividad (${fields.join(',')}) VALUES (${placeholders})`;
+
+  try {
+    const conn = await dbPool.getConnection();
+    await conn.query(sql, values);
+    conn.release();
+    console.log(`Saved cajero_actividad for ${data.userId}`);
+    res.send('Session saved');
+  } catch (err) {
+    console.error('[DB ERROR] Failed to insert cajero_actividad:', err);
+    res.status(500).send('Database error');
   }
 });
 
@@ -151,7 +188,7 @@ startKafkaConsumer(({ userId, game }) => {
   });
 })();
 
-// Clean shutdown
+// Shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down...');
   await dbPool.end();
