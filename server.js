@@ -152,6 +152,42 @@ app.post('/send-cajero-actividad', async (req, res) => {
   }
 });
 
+app.post('/send-identificacion-metrics', async (req, res) => {
+  const data = req.body;
+
+  const columns = [
+    'paciente_id', 'tiempo_actividad', 'errores_totales',
+    'errores_100', 'tiempo_100',
+    'errores_200', 'tiempo_200',
+    'errores_500', 'tiempo_500',
+    'errores_1000', 'tiempo_1000',
+    'errores_2mil', 'tiempo_2mil',
+    'errores_5mil', 'tiempo_5mil',
+    'errores_10mil', 'tiempo_10mil',
+    'errores_20mil', 'tiempo_20mil',
+    'errores_50mil', 'tiempo_50mil',
+    'errores_100mil', 'tiempo_100mil'
+  ];
+
+  const values = columns.map(col => data[col] ?? null);
+  const placeholders = columns.map(() => '?').join(',');
+
+  try {
+    const conn = await dbPool.getConnection();
+    await conn.query(
+      `INSERT INTO metricas_identificacion_dinero (${columns.join(',')}) VALUES (${placeholders})`,
+      values
+    );
+    conn.release();
+    console.log(`🧠 Identificación metrics saved for ${data.paciente_id}`);
+    res.send('OK');
+  } catch (err) {
+    console.error('❌ DB error:', err);
+    res.status(500).send('Error saving metrics');
+  }
+});
+
+
 // ✅ Kafka → WebSocket bridge
 startKafkaConsumer(({ userId, game }) => {
   const normalizedGame = game.toLowerCase();
