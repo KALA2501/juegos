@@ -26,21 +26,10 @@ app.use(cors({
 
 app.use(express.json());
 
-// Serve Unity WebGL games
-app.use('/games/:gameName', (req, res, next) => {
-  const gameName = req.params.gameName.toLowerCase();
-  const gamePath = path.join(__dirname, 'games', gameName);
-  if (!fs.existsSync(gamePath)) return res.status(404).send('Game not found');
-  express.static(gamePath)(req, res, next);
-});
+// ✅ Serve Unity WebGL games (static folder)
+app.use('/games', express.static(path.join(__dirname, 'games')));
 
-app.get('/games/:gameName', (req, res) => {
-  const gameName = req.params.gameName.toLowerCase();
-  const indexPath = path.join(__dirname, 'games', gameName, 'index.html');
-  if (!fs.existsSync(indexPath)) return res.status(404).send('index.html not found');
-  res.sendFile(indexPath);
-});
-
+// Endpoint to directly open index.html of the game
 app.get('/play/:userId', (req, res) => {
   const userId = req.params.userId;
   const game = sessionMap[userId];
@@ -50,7 +39,7 @@ app.get('/play/:userId', (req, res) => {
   res.sendFile(indexPath);
 });
 
-// MySQL
+// ✅ MySQL
 const dbPool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -59,7 +48,7 @@ const dbPool = mysql.createPool({
   port: process.env.DB_PORT || 3306,
 });
 
-// WebSocket
+// ✅ WebSocket
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
@@ -78,7 +67,7 @@ wss.on('connection', (ws, req) => {
         console.warn('Invalid message format');
         return;
       }
-      console.log(`\u{1F4E8} Sending to Kafka: ${userId} → ${game}`);
+      console.log(`📨 Sending to Kafka: ${userId} → ${game}`);
       await producer.send({
         topic: process.env.KAFKA_TOPIC,
         messages: [{ value: JSON.stringify({ userId, game }) }]
@@ -99,7 +88,7 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// Save basic metrics
+// ✅ Basic metrics saving
 app.post('/send-metrics/:game', async (req, res) => {
   const { userId, tiempo, puntaje, errores } = req.body;
   const game = req.params.game.toLowerCase();
@@ -123,9 +112,10 @@ app.post('/send-metrics/:game', async (req, res) => {
   }
 });
 
-// Save full cajero_actividad session
+// ✅ Full cajero_actividad session saving
 app.post('/send-cajero-actividad', async (req, res) => {
   const data = req.body;
+
   if (!data.userId || !data.sessionTimestamp || !data.activityResults) {
     return res.status(400).send('Missing required fields');
   }
@@ -140,6 +130,7 @@ app.post('/send-cajero-actividad', async (req, res) => {
     fields.push(`interaction_${i}_correct_change`);
     fields.push(`interaction_${i}_delta_change`);
     fields.push(`interaction_${i}_identified_well`);
+
     values.push(result.interactionTime ?? null);
     values.push(result.customerCorrectChange ?? null);
     values.push(result.deltaChange ?? null);
@@ -161,11 +152,11 @@ app.post('/send-cajero-actividad', async (req, res) => {
   }
 });
 
-// Kafka → WebSocket
+// ✅ Kafka → WebSocket bridge
 startKafkaConsumer(({ userId, game }) => {
   const normalizedGame = game.toLowerCase();
   sessionMap[userId] = normalizedGame;
-  console.log(`\u{1F3AE} Kafka assigned ${userId} → ${normalizedGame}`);
+  console.log(`🎮 Kafka assigned ${userId} → ${normalizedGame}`);
 
   for (const ws of clients) {
     if (ws.userId === userId) {
@@ -178,13 +169,15 @@ startKafkaConsumer(({ userId, game }) => {
   }
 });
 
+// ✅ Startup
 (async () => {
   await producer.connect();
   server.listen(PORT, () => {
-    console.log(`\u{1F680} Game server running on http://localhost:${PORT}`);
+    console.log(`🚀 Game server running on http://localhost:${PORT}`);
   });
 })();
 
+// ✅ Shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down...');
   await dbPool.end();
