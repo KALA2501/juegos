@@ -187,6 +187,49 @@ app.post('/send-identificacion-metrics', async (req, res) => {
   }
 });
 
+app.post('/send-mercado-metrics', async (req, res) => {
+  const {
+    user,
+    totalActivityDuration,
+    listViewCount,
+    totalListLookTime,
+    correctItemsCount,
+    incorrectItemsCount,
+    totalQuantityOffBy,
+    totalIncorrectQuantity,
+    timestamp
+  } = req.body;
+
+  const sql = `
+    INSERT INTO metricas_mercado (
+      user, totalActivityDuration, listViewCount, totalListLookTime,
+      correctItemsCount, incorrectItemsCount, totalQuantityOffBy,
+      totalIncorrectQuantity, timestamp
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  try {
+    const conn = await dbPool.getConnection();
+    await conn.query(sql, [
+      user,
+      totalActivityDuration,
+      listViewCount,
+      totalListLookTime,
+      correctItemsCount,
+      incorrectItemsCount,
+      totalQuantityOffBy,
+      totalIncorrectQuantity,
+      timestamp.replace("T", " ").replace("Z", "")
+    ]);
+    conn.release();
+    res.send("Metrics saved");
+  } catch (err) {
+    console.error("❌ Error saving mercado metrics:", err);
+    res.status(500).send("DB error");
+  }
+});
+
+
 
 // ✅ Kafka → WebSocket bridge
 startKafkaConsumer(({ userId, game }) => {
