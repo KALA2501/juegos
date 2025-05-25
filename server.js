@@ -78,7 +78,7 @@ wss.on('connection', (ws, req) => {
         console.warn('Invalid message format');
         return;
       }
-      console.log(`📨 Sending to Kafka: ${userId} → ${game}`);
+      console.log(`\u{1F4E8} Sending to Kafka: ${userId} → ${game}`);
       await producer.send({
         topic: process.env.KAFKA_TOPIC,
         messages: [{ value: JSON.stringify({ userId, game }) }]
@@ -126,7 +126,6 @@ app.post('/send-metrics/:game', async (req, res) => {
 // Save full cajero_actividad session
 app.post('/send-cajero-actividad', async (req, res) => {
   const data = req.body;
-
   if (!data.userId || !data.sessionTimestamp || !data.activityResults) {
     return res.status(400).send('Missing required fields');
   }
@@ -141,7 +140,6 @@ app.post('/send-cajero-actividad', async (req, res) => {
     fields.push(`interaction_${i}_correct_change`);
     fields.push(`interaction_${i}_delta_change`);
     fields.push(`interaction_${i}_identified_well`);
-
     values.push(result.interactionTime ?? null);
     values.push(result.customerCorrectChange ?? null);
     values.push(result.deltaChange ?? null);
@@ -167,7 +165,7 @@ app.post('/send-cajero-actividad', async (req, res) => {
 startKafkaConsumer(({ userId, game }) => {
   const normalizedGame = game.toLowerCase();
   sessionMap[userId] = normalizedGame;
-  console.log(`🎮 Kafka assigned ${userId} → ${normalizedGame}`);
+  console.log(`\u{1F3AE} Kafka assigned ${userId} → ${normalizedGame}`);
 
   for (const ws of clients) {
     if (ws.userId === userId) {
@@ -180,15 +178,13 @@ startKafkaConsumer(({ userId, game }) => {
   }
 });
 
-// Startup
 (async () => {
   await producer.connect();
   server.listen(PORT, () => {
-    console.log(`🚀 Game server running on http://localhost:${PORT}`);
+    console.log(`\u{1F680} Game server running on http://localhost:${PORT}`);
   });
 })();
 
-// Shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down...');
   await dbPool.end();
